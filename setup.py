@@ -11,6 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config', ['config/camera_ips.yaml']),
+        ('share/' + package_name + '/log', ['log/times.txt']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

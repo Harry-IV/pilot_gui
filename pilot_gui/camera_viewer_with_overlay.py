@@ -12,7 +12,7 @@ from ament_index_python.packages import get_package_share_directory
 
 # Finds the path for the share directory where the config will be located
 package_share_directory = get_package_share_directory("pilot_gui")
-
+#blah 
 class CameraViewer(Node):
     def __init__(self):
         super().__init__("camera_viewer")
@@ -47,6 +47,7 @@ class CameraViewer(Node):
         resolution = (1440,810)
         self.stopped = False
         self.started = False
+        self.cached_input = [0,0]
         self.overlay = camera_overlay.Overlay(resolution)
         self.log.info("LAUNCHING STREAM!")
         self.create_timer(1/200.0,self.display_frame)
@@ -80,11 +81,14 @@ class CameraViewer(Node):
         if(result):
             # Both of these lines are ESSENTIAL for displaying the frame onto the screen
             frame = self.overlay.add_camera_status(frame, self.current_cam)
-            # if(self.started and not self.stopped):
-            #     time_elapsed = math.trunc(time.time()-self.start_time)
-            #     frame = self.overlay.add_timer(frame, time_elapsed)
-            # elif(self.stopped):
-            #     frame = self.overlay.add_timer(frame, self.finished_time)
+            if(self.started and not self.stopped):
+                time_elapsed = math.trunc(time.time()-self.start_time)
+                frame = self.overlay.add_timer(frame, time_elapsed)
+            elif(self.stopped):
+                frame = self.overlay.add_timer(frame, self.finished_time)
+            else:
+                frame = self.overlay.add_timer(frame, 0)
+            # frame = self.overlay.add_sensitivities(frame, self.sensitivity)
             cv2.imshow("Camera Feed", frame)
             cv2.waitKey(1) 
    
@@ -103,19 +107,33 @@ class CameraViewer(Node):
             self.current_cam = "Bottom"
     
     def stopwatch_callback(self,joy):
-        if(joy.buttons[9] == 1):
+        if(joy.buttons[9] == 1 and self.cached_input[0] == 0):
             if(not self.started):
                 self.start_time = time.time()
                 self.started = True
-            if(self.started):
+            elif(self.started and not self.stopped):
                 self.stopped = True 
-            if(self.stopped):
-                config_path = package_share_directory + "/log/times.txt"
-                with(config_path, 'w') as f:
-                    self.finished_time = math.trunc(time.time() - self.start_time)
-                    seconds = f"{self.finished_time%60:02}"
-                    minutes = (self.finished_time-seconds)/60
+                self.finished_time = math.trunc(time.time() - self.start_time)
+            elif(self.stopped):
+                log_path = package_share_directory + "/log/times.txt"
+                seconds = f"{self.finished_time%60:02}"
+                minutes = f"{(self.finished_time-int(seconds))/60:02}"
+                with open(log_path, 'w') as f:
                     f.write(f"{minutes}:{seconds}\n")
+                    f.close()
+                self.started = False
+                self.stopped = False
+
+            self.cached_input[0] = 1
+        else:
+            self.cached_input[0] = 0
+
+        if(joy.buttons[8] == 1 and self.stopped):
+            self.started = False
+            self.stopped = False
+            self.cached_input[1] = 1
+        else:
+            self.cached_input[1] = 0
 
     def sensitivity_callback(self, sensitivity_data):
         self.sensitivity["Horizontal"] = round(sensitivity_data.horizontal, 2)
