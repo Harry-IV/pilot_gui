@@ -8,6 +8,7 @@ import time
 import math
 import cv2
 import yaml
+import os
 from ament_index_python.packages import get_package_share_directory
 
 # Finds the path for the share directory where the config will be located
@@ -47,7 +48,7 @@ class CameraViewer(Node):
         resolution = (1440,810)
         self.stopped = False
         self.started = False
-        self.cached_input = [0,0]
+        self.cached_input = {"Button 9" : 0}
         self.overlay = camera_overlay.Overlay(resolution)
         self.log.info("LAUNCHING STREAM!")
         self.create_timer(1/200.0,self.display_frame)
@@ -107,7 +108,7 @@ class CameraViewer(Node):
             self.current_cam = "Bottom"
     
     def stopwatch_callback(self,joy):
-        if(joy.buttons[9] == 1 and self.cached_input[0] == 0):
+        if(joy.buttons[9] == 1 and self.cached_input["Button 9"] == 0):
             if(not self.started):
                 self.start_time = time.time()
                 self.started = True
@@ -115,25 +116,26 @@ class CameraViewer(Node):
                 self.stopped = True 
                 self.finished_time = math.trunc(time.time() - self.start_time)
             elif(self.stopped):
-                log_path = package_share_directory + "/log/times.txt"
                 seconds = f"{self.finished_time%60:02}"
-                minutes = f"{(self.finished_time-int(seconds))/60:02}"
-                with open(log_path, 'w') as f:
+                minutes = f"{int((self.finished_time-int(seconds))/60):02}"
+                self.log.info(f"Writing {minutes}:{seconds} to times.txt")
+                user = os.getlogin()
+                log_path = f"/home/{user}/pcorews/rov_log/times.txt"
+                log_dir = os.path.dirname(log_path)
+                if not os.path.exists(log_path):
+                    os.mkdir(log_dir)
+                with open(log_path, 'a') as f:
                     f.write(f"{minutes}:{seconds}\n")
                     f.close()
                 self.started = False
                 self.stopped = False
-
-            self.cached_input[0] = 1
-        else:
-            self.cached_input[0] = 0
+            self.cached_input["Button 9"] = 1
+        elif (joy.buttons[9] == 0):
+            self.cached_input["Button 9"] = 0
 
         if(joy.buttons[8] == 1 and self.stopped):
             self.started = False
             self.stopped = False
-            self.cached_input[1] = 1
-        else:
-            self.cached_input[1] = 0
 
     def sensitivity_callback(self, sensitivity_data):
         self.sensitivity["Horizontal"] = round(sensitivity_data.horizontal, 2)
