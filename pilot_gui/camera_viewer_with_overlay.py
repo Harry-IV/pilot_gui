@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from core_lib import camera_overlay
+from std_srvs.srv import SetBool
 # from core.msg import import Sensitivity
 import time
 import math
@@ -24,6 +25,8 @@ class CameraViewer(Node):
             # Dictionary storing the IPs of the known cameras
             self.known_cameras = yaml.load(f, Loader=yaml.SafeLoader)
         self.working_cameras = {}
+        self.thrusters_enabled = False
+        self.leak_detected = False
         # Checks if all the cameras are working
         self.check_cameras()
         # stops the program if there are no working cameras
@@ -41,6 +44,8 @@ class CameraViewer(Node):
         # Note: The callback only runs when it detects new input from the joystick.
         self.joy_sub = self.create_subscription(Joy,"joy", self.change_camera,qos_profile=10)
         self.stopwatch = self.create_subscription(Joy, "joy", self.stopwatch_callback, qos_profile=10)
+        self.thruster_status_srv = self.create_service(SetBool, 'thruster_status', self.thruster_status_callback)
+        self.lead_detect_srv = self.create_service(SetBool, 'leak_detection', self.leak_detection_callback)
         #self.sensitivity_pub = self.create_subscription(Sensitivity,"sensitivity", self.sensitivity_callback)
         self.sensitivity = {"Horizontal" : None, "Vertical": None, "Angular": None, "Slow Factor": None}
         # Callback for displaying the camera feed
@@ -82,6 +87,11 @@ class CameraViewer(Node):
         if(result):
             # Both of these lines are ESSENTIAL for displaying the frame onto the screen
             frame = self.overlay.add_camera_status(frame, self.current_cam)
+            frame = self.overlay.add_sensitivities(frame, self.sensitivity)
+            frame = self.overlay.add_thruster_status(frame, self.thrusters_enabled)
+            self.leak_detected = True
+            if(self.leak_detected):
+                frame = self.overlay.add_leak_warning(frame)
             if(self.started and not self.stopped):
                 time_elapsed = math.trunc(time.time()-self.start_time)
                 frame = self.overlay.add_timer(frame, time_elapsed)
@@ -142,6 +152,16 @@ class CameraViewer(Node):
         self.sensitivity["Vertical"] = round(sensitivity_data.horizontal, 2)
         self.sensitivity["Angular"] = round(sensitivity_data.angular, 2)
         self.sensitivity["Slow Factor"] = round(sensitivity_data.slow_factor, 2)
+    
+    def thruster_status_callback(self, request, response):
+        self.thrusters_enabled = request.data
+        response.success = True
+        return response
+    
+    def leak_detection_callback(self, request, response):
+        self.leak_detected = request.data
+        response.success = True
+        return response
     
 def main(args=None):
    rclpy.init(args=args)
